@@ -2,25 +2,99 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #2a1a3a;
+
+  /* Cores da Maré Shop */
+  --roxo: #520874;
+  --roxo-escuro: #770992;
+  --lilas: #ddd6fe;
+  --lilas-claro: #f5f3ff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-roxo: var(--roxo);
+  --color-roxo-escuro: var(--roxo-escuro);
+  --color-lilas: var(--lilas);
+  --color-lilas-claro: var(--lilas-claro);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
-  color: var(--foreground);
+  color: var (white);
   font-family: Arial, Helvetica, sans-serif;
+}
+.menu-categorias {
+  position: fixed;
+  top: 0;
+  left: -300px;
+
+  width: 280px;
+  height: 100vh;
+ 
+  background-color: #c05cda;
+
+  z-index: 1000;
+
+  transition: left 0.3s ease;
+
+  box-shadow: 4px 0 15px rgba(255, 253, 253, 0);
+}
+
+.menu-categorias.aberto {
+  left: 0;
+}
+.fundo-menu {
+  position: fixed;
+  inset: 0;
+
+  background-color: #2a1a3a;
+
+  z-index: 999;
+}
+
+.cabecalho-categorias {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 20px;
+}
+
+.cabecalho-categorias h2 {
+  margin: 0;
+}
+
+.cabecalho-categorias button {
+  border: none;
+  background: none;
+ font-size: 22px;
+
+  cursor: pointer;
+}
+
+.lista-categorias {
+  display: flex;
+  flex-direction: column;
+}
+
+.lista-categorias button {
+  text-align: left;
+
+  padding: 16px 20px;
+
+  border: none;
+  background: transparent;
+
+  font-size: 16px;
+
+  cursor: pointer;
+}
+.lista-categorias button:hover {
+  background: var(--lilas-claro);
 }
