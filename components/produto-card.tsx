@@ -22,28 +22,63 @@ export default function ProdutoCard({
 }: ProdutoCardProps) {
   const [detalhesAberto, setDetalhesAberto] = useState(false)
 
+  function abrirDetalhes() {
+    setDetalhesAberto(true)
+  }
+
   return (
     <>
-      <button
-        onClick={() => setDetalhesAberto(true)}
-        className="w-full text-left rounded-lg overflow-hidden border border-lilas bg-white"
-      >
-        <img
-          src={imagem || "/placeholder.svg"}
-          alt={nome}
-          className="w-full h-48 object-cover"
-        />
+      <div className="overflow-hidden rounded-lg border border-lilas bg-white">
 
-        <div className="p-3">
-          <h3 className="font-medium text-foreground">
-            {nome}
-          </h3>
+        {/* Produto */}
+        <button
+          onClick={abrirDetalhes}
+          className="w-full text-left"
+        >
+          <img
+            src={imagem || "/placeholder.svg"}
+            alt={nome}
+            className="
+              h-52
+              w-full
+              object-cover
 
-          <p className="mt-1 font-bold text-roxo">
-            R$ {preco.toFixed(2)}
-          </p>
+              md:h-64
+            "
+          />
+
+          <div className="p-3">
+            <h3 className="font-medium text-foreground">
+              {nome}
+            </h3>
+
+            <p className="mt-1 font-bold text-roxo">
+              R$ {preco.toFixed(2)}
+            </p>
+          </div>
+        </button>
+
+        {/* Comprar */}
+        <div className="px-3 pb-3">
+          <button
+            onClick={abrirDetalhes}
+            className="
+              w-full
+              rounded-full
+              bg-roxo
+              px-4
+              py-2
+              font-medium
+              text-white
+              transition
+              hover:opacity-90
+            "
+          >
+            Comprar
+          </button>
         </div>
-      </button>
+
+      </div>
 
       <ProdutoDetalhes
         aberto={detalhesAberto}
