@@ -48,14 +48,24 @@ export default function CategoriasFotos() {
     async function carregarProdutos() {
       const { data, error } = await supabase
         .from("produtos")
-        .select("categoria, imagem")
+        .select("*")
 
       if (error) {
-        console.error("Erro ao carregar imagens das categorias:", error)
+        console.error(
+          "Erro ao carregar imagens das categorias:",
+          error.message,
+          error.details,
+          error.hint
+        )
         return
       }
 
-      setProdutos(data || [])
+      setProdutos(
+        (data || []).map((produto) => ({
+          categoria: produto.categoria,
+          imagem: produto.imagem,
+        }))
+      )
     }
 
     carregarProdutos()
@@ -66,7 +76,7 @@ export default function CategoriasFotos() {
       (produto) => produto.categoria === categoria
     )
 
-    return produto?.imagem || "/placeholder.svg"
+    return produto?.imagem || ""
   }
 
   return (
@@ -76,7 +86,6 @@ export default function CategoriasFotos() {
         Categorias
       </h2>
 
-      {/* Área das categorias */}
       <div
         className="
           flex
@@ -92,62 +101,73 @@ export default function CategoriasFotos() {
           md:pb-0
         "
       >
-        {categorias.map((categoria) => (
-          <button
-            key={categoria.valor}
-            onClick={() => setCategoria(categoria.valor)}
-            className="
-              flex
-              min-w-[90px]
-              flex-col
-              items-center
-              text-center
-              transition
-              hover:scale-105
+        {categorias.map((categoria) => {
+          const imagem = pegarImagem(categoria.valor)
 
-              md:min-w-0
-            "
-          >
-            {/* Foto circular */}
-            <div
+          return (
+            <button
+              key={categoria.valor}
+              onClick={() => setCategoria(categoria.valor)}
               className="
-                h-20
-                w-20
-                overflow-hidden
-                rounded-full
-                border-2
-                border-lilas
-                bg-gray-100
+                flex
+                min-w-[90px]
+                flex-col
+                items-center
+                text-center
+                transition
+                hover:scale-105
 
-                md:h-32
-                md:w-32
-                md:border-[3px]
+                md:min-w-0
               "
             >
-              <img
-                src={pegarImagem(categoria.valor)}
-                alt={categoria.nome}
-                className="h-full w-full object-cover"
-              />
-            </div>
 
-            {/* Nome */}
-            <span
-              className="
-                mt-2
-                text-sm
-                font-medium
-                text-roxo
+              <div
+                className="
+                  h-20
+                  w-20
+                  overflow-hidden
+                  rounded-full
+                  border-2
+                  border-lilas
+                  bg-gray-100
 
-                md:mt-3
-                md:text-base
-              "
-            >
-              {categoria.nome}
-            </span>
-          </button>
-        ))}
+                  md:h-32
+                  md:w-32
+                  md:border-[3px]
+                "
+              >
+                {imagem ? (
+                  <img
+                    src={imagem}
+                    alt={categoria.nome}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-xs text-gray-400">
+                    Sem foto
+                  </div>
+                )}
+              </div>
+
+              <span
+                className="
+                  mt-2
+                  text-sm
+                  font-medium
+                  text-roxo
+
+                  md:mt-3
+                  md:text-base
+                "
+              >
+                {categoria.nome}
+              </span>
+
+            </button>
+          )
+        })}
       </div>
+
     </section>
   )
 }

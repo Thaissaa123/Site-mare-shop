@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-type Variacao = {
-  nome: string
+type FotoCor = {
+  cor: string
   arquivo: File | null
 }
 
@@ -29,43 +29,12 @@ export default function Admin() {
   const [preco, setPreco] = useState("")
   const [categoria, setCategoria] = useState("vestidos")
 
-  const [arquivoImagem, setArquivoImagem] = useState<File | null>(null)
-
   const [tamanhos, setTamanhos] = useState<string[]>([])
   const [cores, setCores] = useState<string[]>([])
-
-  const [variacoes, setVariacoes] = useState<Variacao[]>([])
+  const [fotosCores, setFotosCores] = useState<FotoCor[]>([])
 
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState("")
-
-  // =========================
-  // VERIFICAR SESSÃO
-  // =========================
-
-  useEffect(() => {
-    async function verificarSessao() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session) {
-        setEntrou(true)
-      }
-    }
-
-    verificarSessao()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setEntrou(!!session)
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
 
   // =========================
   // LOGIN
@@ -126,7 +95,7 @@ export default function Admin() {
   }
 
   // =========================
-  // CORES / ESTAMPAS
+  // CORES
   // =========================
 
   function adicionarCor() {
@@ -140,12 +109,24 @@ export default function Admin() {
 
     if (!novaCor) return
 
-    if (cores.includes(novaCor)) {
-      setErro("Essa cor ou estampa já foi adicionada.")
+    const corJaExiste = cores.some(
+      (cor) => cor.toLowerCase() === novaCor.toLowerCase()
+    )
+
+    if (corJaExiste) {
+      setErro("Essa cor já foi adicionada.")
       return
     }
 
     setCores((atuais) => [...atuais, novaCor])
+
+    setFotosCores((atuais) => [
+      ...atuais,
+      {
+        cor: novaCor,
+        arquivo: null,
+      },
+    ])
 
     input.value = ""
     setErro("")
@@ -155,58 +136,32 @@ export default function Admin() {
     setCores((atuais) =>
       atuais.filter((item) => item !== cor)
     )
-  }
 
-  // =========================
-  // VARIAÇÕES / ESTAMPAS
-  // =========================
-
-  function adicionarVariacao() {
-    setVariacoes((atuais) => [
-      ...atuais,
-      {
-        nome: "",
-        arquivo: null,
-      },
-    ])
-  }
-
-  function removerVariacao(index: number) {
-    setVariacoes((atuais) =>
-      atuais.filter((_, i) => i !== index)
+    setFotosCores((atuais) =>
+      atuais.filter((item) => item.cor !== cor)
     )
   }
 
-  function alterarNomeVariacao(
-    index: number,
-    nomeVariacao: string
-  ) {
-    setVariacoes((atuais) =>
-      atuais.map((variacao, i) =>
-        i === index
-          ? {
-              ...variacao,
-              nome: nomeVariacao,
-            }
-          : variacao
-      )
-    )
-  }
+  // =========================
+  // FOTO DE CADA COR
+  // =========================
 
-  function alterarArquivoVariacao(
+  function alterarFotoCor(
     index: number,
     arquivo: File | null
   ) {
-    setVariacoes((atuais) =>
-      atuais.map((variacao, i) =>
+    setFotosCores((atuais) =>
+      atuais.map((item, i) =>
         i === index
           ? {
-              ...variacao,
+              ...item,
               arquivo,
             }
-          : variacao
+          : item
       )
     )
+
+    setErro("")
   }
 
   // =========================
@@ -217,7 +172,22 @@ export default function Admin() {
     setMensagem("")
     setErro("")
 
-    if (!nome.trim() || !preco || !categoria || !arquivoImagem) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    console.log("USUÁRIO LOGADO:", session?.user?.id)
+
+    if (!session) {
+      setErro("Sua sessão expirou. Faça login novamente.")
+      return
+    }
+
+    if (
+      !nome.trim() ||
+      !preco ||
+      !categoria
+    ) {
       setErro("Preencha todos os campos obrigatórios.")
       return
     }
@@ -232,15 +202,17 @@ export default function Admin() {
       return
     }
 
-    // Verifica se existe alguma variação incompleta
-    const variacaoIncompleta = variacoes.some(
-      (variacao) =>
-        !variacao.nome.trim() || !variacao.arquivo
+    // =========================
+    // VERIFICAR FOTOS DAS CORES
+    // =========================
+
+    const algumaCorSemFoto = fotosCores.some(
+      (foto) => !foto.arquivo
     )
 
-    if (variacaoIncompleta) {
+    if (algumaCorSemFoto) {
       setErro(
-        "Preencha o nome e a foto de todas as estampas adicionadas."
+        "Escolha uma foto para todas as cores cadastradas."
       )
       return
     }
@@ -249,109 +221,141 @@ export default function Admin() {
 
     try {
       // =========================
-      // FOTO PRINCIPAL
+      // ENVIAR FOTOS DAS CORES
       // =========================
 
-      const nomeArquivoPrincipal =
-        `${Date.now()}-${arquivoImagem.name.replace(/\s/g, "-")}`
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from("produtos")
-          .upload(
-            nomeArquivoPrincipal,
-            arquivoImagem
-          )
-
-      if (uploadError) {
-        console.error(uploadError)
-        setErro(
-          "Não foi possível enviar a foto principal."
-        )
-        setSalvando(false)
-        return
-      }
-
-      const { data: imagemData } =
-        supabase.storage
-          .from("produtos")
-          .getPublicUrl(nomeArquivoPrincipal)
-
-      const urlImagem = imagemData.publicUrl
-
-      // =========================
-      // FOTOS DAS VARIAÇÕES
-      // =========================
-
-      const variacoesSalvas: {
-        nome: string
+      const fotosSalvas: {
+        cor: string
         imagem: string
       }[] = []
 
-      for (const variacao of variacoes) {
-        if (!variacao.arquivo) {
+      for (let i = 0; i < fotosCores.length; i++) {
+        const fotoCor = fotosCores[i]
+
+        if (!fotoCor.arquivo) {
           continue
         }
 
-        const nomeArquivoVariacao =
+        const nomeArquivoCor =
           `${Date.now()}-${Math.random()
             .toString(36)
-            .substring(2, 10)}-${variacao.arquivo.name.replace(
+            .substring(2, 10)}-${fotoCor.arquivo.name.replace(
             /\s/g,
             "-"
           )}`
 
-        const { error: erroUploadVariacao } =
+        const { error: erroUploadCor } =
           await supabase.storage
             .from("produtos")
             .upload(
-              nomeArquivoVariacao,
-              variacao.arquivo
+              nomeArquivoCor,
+              fotoCor.arquivo
             )
 
-        if (erroUploadVariacao) {
-          console.error(erroUploadVariacao)
+        if (erroUploadCor) {
+          console.error(erroUploadCor)
+
           setErro(
-            "Não foi possível enviar uma das fotos das estampas."
+            `Não foi possível enviar a foto da cor ${fotoCor.cor}.`
           )
+
           setSalvando(false)
           return
         }
 
-        const { data: dadosImagemVariacao } =
+        const { data: imagemCorData } =
           supabase.storage
             .from("produtos")
-            .getPublicUrl(nomeArquivoVariacao)
+            .getPublicUrl(
+              nomeArquivoCor
+            )
 
-        variacoesSalvas.push({
-          nome: variacao.nome.trim(),
-          imagem: dadosImagemVariacao.publicUrl,
+        const urlFotoCor =
+          imagemCorData.publicUrl
+
+        fotosSalvas.push({
+          cor: fotoCor.cor,
+          imagem: urlFotoCor,
         })
       }
 
       // =========================
-      // SALVAR NO SUPABASE
+      // VERIFICAR SE AS FOTOS FORAM SALVAS
       // =========================
 
-      const { error } = await supabase
-        .from("produtos")
-        .insert({
-          nome: nome.trim(),
-          preco: Number(preco),
-          categoria,
-          imagem: urlImagem,
-          tamanhos,
-          cores,
-          variacoes: variacoesSalvas,
-        })
+      if (fotosSalvas.length === 0) {
+        setErro(
+          "Adicione pelo menos uma foto ao produto."
+        )
 
-      if (error) {
-        console.error(error)
+        setSalvando(false)
+        return
+      }
+
+      // =========================
+      // CRIAR PRODUTO
+      // =========================
+      //
+      // A coluna "imagem" ainda existe na tabela
+      // produtos. Para manter o banco funcionando,
+      // usamos automaticamente a primeira foto cadastrada.
+      //
+      // Isso NÃO significa que ela seja uma "foto principal".
+      // Para o cliente, todas as fotos são opções do produto.
+      // =========================
+
+      const { data: produtoCriado, error: erroProduto } =
+        await supabase
+          .from("produtos")
+          .insert({
+            nome: nome.trim(),
+            preco: Number(preco),
+            categoria,
+            imagem: fotosSalvas[0].imagem,
+            tamanhos,
+            cores,
+          })
+          .select("id")
+          .single()
+
+      if (erroProduto || !produtoCriado) {
+        console.error(erroProduto)
+
         setErro(
           "Não foi possível salvar o produto."
         )
+
         setSalvando(false)
         return
+      }
+
+      // =========================
+      // SALVAR FOTOS NO BANCO
+      // =========================
+
+      for (let i = 0; i < fotosSalvas.length; i++) {
+        const foto = fotosSalvas[i]
+
+        const { error: erroFoto } =
+          await supabase
+            .from("fotos_produto")
+            .insert({
+              produto_id: produtoCriado.id,
+              cor: foto.cor,
+              imagem: foto.imagem,
+              ordem: i,
+            })
+
+        if (erroFoto) {
+          console.error(erroFoto)
+
+          setErro(
+            `Não foi possível salvar a foto da cor ${foto.cor}.`
+          )
+
+          setSalvando(false)
+          return
+        }
       }
 
       // =========================
@@ -361,19 +365,17 @@ export default function Admin() {
       setNome("")
       setPreco("")
       setCategoria("vestidos")
-      setArquivoImagem(null)
       setTamanhos([])
       setCores([])
-      setVariacoes([])
+      setFotosCores([])
 
-      // Limpa o input de arquivo
-      const inputArquivo =
+      const inputNovaCor =
         document.getElementById(
-          "foto-produto"
+          "nova-cor"
         ) as HTMLInputElement | null
 
-      if (inputArquivo) {
-        inputArquivo.value = ""
+      if (inputNovaCor) {
+        inputNovaCor.value = ""
       }
 
       setMensagem(
@@ -381,6 +383,7 @@ export default function Admin() {
       )
     } catch (error) {
       console.error(error)
+
       setErro(
         "Ocorreu um erro ao cadastrar o produto."
       )
@@ -562,33 +565,6 @@ export default function Admin() {
                   </select>
                 </div>
 
-                {/* FOTO PRINCIPAL */}
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Foto principal do produto
-                  </label>
-
-                  <input
-                    id="foto-produto"
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const arquivo =
-                        e.target.files?.[0] || null
-
-                      setArquivoImagem(arquivo)
-                    }}
-                    className="w-full border rounded-xl px-4 py-3"
-                  />
-
-                  {arquivoImagem && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      📷 {arquivoImagem.name}
-                    </p>
-                  )}
-                </div>
-
                 {/* TAMANHOS */}
 
                 <div>
@@ -633,10 +609,11 @@ export default function Admin() {
                   </label>
 
                   <div className="flex gap-2">
+
                     <input
                       id="nova-cor"
                       type="text"
-                      placeholder="Ex: Floral rosa"
+                      placeholder="Ex: Rosa"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault()
@@ -653,10 +630,12 @@ export default function Admin() {
                     >
                       +
                     </button>
+
                   </div>
 
                   {cores.length > 0 && (
                     <div className="flex gap-2 flex-wrap mt-3">
+
                       {cores.map((cor) => (
                         <button
                           key={cor}
@@ -669,6 +648,7 @@ export default function Admin() {
                           {cor} ×
                         </button>
                       ))}
+
                     </div>
                   )}
 
@@ -678,67 +658,37 @@ export default function Admin() {
                   </p>
                 </div>
 
-                {/* VARIAÇÕES */}
+                {/* FOTOS DAS CORES */}
 
                 <div className="border-t pt-5">
 
                   <label className="block text-sm font-medium mb-1">
-                    Estampas com fotos
+                    Fotos do produto
                   </label>
 
                   <p className="text-xs text-gray-500 mb-4">
-                    Use esta opção quando o mesmo produto
-                    tiver estampas diferentes com fotos
-                    próprias.
+                    Adicione uma foto para cada cor ou
+                    estampa cadastrada.
                   </p>
 
                   <div className="space-y-4">
 
-                    {variacoes.map(
-                      (variacao, index) => (
+                    {fotosCores.map(
+                      (fotoCor, index) => (
                         <div
-                          key={index}
+                          key={fotoCor.cor}
                           className="border rounded-xl p-4 bg-gray-50"
                         >
 
-                          <div className="flex justify-between items-center mb-3">
-
-                            <p className="font-semibold text-roxo-escuro">
-                              Estampa {index + 1}
-                            </p>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removerVariacao(
-                                  index
-                                )
-                              }
-                              className="text-red-500 text-sm"
-                            >
-                              🗑️ Remover
-                            </button>
-
-                          </div>
-
-                          <input
-                            type="text"
-                            value={variacao.nome}
-                            onChange={(e) =>
-                              alterarNomeVariacao(
-                                index,
-                                e.target.value
-                              )
-                            }
-                            placeholder="Ex: Floral Rosa"
-                            className="w-full border rounded-xl px-4 py-3 mb-3 bg-white"
-                          />
+                          <p className="font-semibold text-roxo-escuro mb-3">
+                            📷 {fotoCor.cor}
+                          </p>
 
                           <input
                             type="file"
                             accept="image/*"
                             onChange={(e) =>
-                              alterarArquivoVariacao(
+                              alterarFotoCor(
                                 index,
                                 e.target.files?.[0] ||
                                   null
@@ -747,10 +697,10 @@ export default function Admin() {
                             className="w-full border rounded-xl px-4 py-3 bg-white"
                           />
 
-                          {variacao.arquivo && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              📷{" "}
-                              {variacao.arquivo.name}
+                          {fotoCor.arquivo && (
+                            <p className="text-xs text-green-600 mt-2">
+                              ✓{" "}
+                              {fotoCor.arquivo.name}
                             </p>
                           )}
 
@@ -760,13 +710,12 @@ export default function Admin() {
 
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={adicionarVariacao}
-                    className="mt-4 w-full border border-roxo text-roxo rounded-xl py-3 font-semibold"
-                  >
-                    ➕ Adicionar estampa com foto
-                  </button>
+                  {cores.length === 0 && (
+                    <p className="text-xs text-gray-500 mt-3">
+                      Adicione primeiro as cores do
+                      produto.
+                    </p>
+                  )}
 
                 </div>
 
@@ -895,5 +844,6 @@ export default function Admin() {
     </main>
   )
 }
+
 
 
