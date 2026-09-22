@@ -27,7 +27,115 @@ export default function Admin() {
 
   const [nome, setNome] = useState("")
   const [preco, setPreco] = useState("")
-  const [categoria, setCategoria] = useState("vestidos")
+ const [categoriasSelecionadas, setCategoriasSelecionadas] =
+  useState<
+    {
+      principal: string
+      subcategoria: string | null
+    }[]
+  >([])
+
+  const categoriasDisponiveis = [
+  {
+    nome: "Vestidos",
+    valor: "vestidos",
+    subcategorias: [
+      {
+        nome: "Vestidos Casuais",
+        valor: "vestidos-casuais",
+      },
+      {
+        nome: "Vestidos Sociais",
+        valor: "vestidos-sociais",
+      },
+      {
+        nome: "Vestidos Justos",
+        valor: "vestidos-justos",
+      },
+    ],
+  },
+
+  {
+    nome: "Blusas",
+    valor: "blusas",
+    subcategorias: [
+      {
+        nome: "Blusas Casuais",
+        valor: "blusas-casuais",
+      },
+      {
+        nome: "Blusas Sociais",
+        valor: "blusas-sociais",
+      },
+      {
+        nome: "Croppeds & Justinhas",
+        valor: "croppeds-justinhas",
+      },
+      {
+        nome: "T-shirts",
+        valor: "t-shirts",
+      },
+    ],
+  },
+
+  {
+    nome: "Calças",
+    valor: "calcas",
+  },
+
+  {
+    nome: "Shorts & Saias",
+    valor: "shorts-e-saias",
+    subcategorias: [
+      {
+        nome: "Shorts",
+        valor: "shorts",
+      },
+      {
+        nome: "Saias",
+        valor: "saias",
+      },
+    ],
+  },
+
+  {
+    nome: "Conjuntos",
+    valor: "conjuntos",
+  },
+
+  {
+    nome: "Moda Cristã",
+    valor: "moda-crista",
+    subcategorias: [
+      {
+        nome: "Saias",
+        valor: "moda-crista-saias",
+      },
+      {
+        nome: "Vestidos",
+        valor: "moda-crista-vestidos",
+      },
+      {
+        nome: "T-shirts com frases",
+        valor: "t-shirts-com-frases",
+      },
+      {
+        nome: "Blusas",
+        valor: "moda-crista-blusas",
+      },
+    ],
+  },
+
+  {
+    nome: "Acessórios",
+    valor: "acessorios",
+  },
+
+  {
+    nome: "Coleção Inverno",
+    valor: "colecao-inverno",
+  },
+]
 
   const [tamanhos, setTamanhos] = useState<string[]>([])
   const [cores, setCores] = useState<string[]>([])
@@ -36,6 +144,38 @@ export default function Admin() {
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState("")
 
+
+
+  function alternarCategoria(
+  principal: string,
+  subcategoria: string | null
+) {
+  setCategoriasSelecionadas((atuais) => {
+    const existe = atuais.some(
+      (item) =>
+        item.principal === principal &&
+        item.subcategoria === subcategoria
+    )
+
+    if (existe) {
+      return atuais.filter(
+        (item) =>
+          !(
+            item.principal === principal &&
+            item.subcategoria === subcategoria
+          )
+      )
+    }
+
+    return [
+      ...atuais,
+      {
+        principal,
+        subcategoria,
+      },
+    ]
+  })
+}
   // =========================
   // LOGIN
   // =========================
@@ -186,7 +326,7 @@ export default function Admin() {
     if (
       !nome.trim() ||
       !preco ||
-      !categoria
+      categoriasSelecionadas.length === 0
     ) {
       setErro("Preencha todos os campos obrigatórios.")
       return
@@ -310,7 +450,7 @@ export default function Admin() {
           .insert({
             nome: nome.trim(),
             preco: Number(preco),
-            categoria,
+            categoria: categoriasSelecionadas[0].principal,
             imagem: fotosSalvas[0].imagem,
             tamanhos,
             cores,
@@ -328,6 +468,33 @@ export default function Admin() {
         setSalvando(false)
         return
       }
+
+      // =========================
+// SALVAR CATEGORIAS
+// =========================
+
+const categoriasParaSalvar = categoriasSelecionadas.map(
+  (item) => ({
+    produto_id: produtoCriado.id,
+    categoria_principal: item.principal,
+    subcategoria: item.subcategoria,
+  })
+)
+
+const { error: erroCategorias } = await supabase
+  .from("produto_categorias")
+  .insert(categoriasParaSalvar)
+
+if (erroCategorias) {
+  console.error(erroCategorias)
+
+  setErro(
+    "O produto foi criado, mas não foi possível salvar as categorias."
+  )
+
+  setSalvando(false)
+  return
+}
 
       // =========================
       // SALVAR FOTOS NO BANCO
@@ -364,7 +531,7 @@ export default function Admin() {
 
       setNome("")
       setPreco("")
-      setCategoria("vestidos")
+      setCategoriasSelecionadas([])
       setTamanhos([])
       setCores([])
       setFotosCores([])
@@ -521,49 +688,123 @@ export default function Admin() {
                   />
                 </div>
 
-                {/* CATEGORIA */}
+               {/* CATEGORIAS */}
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Categoria
-                  </label>
+<div>
+  <label className="block text-sm font-medium mb-2">
+    Categorias
+  </label>
 
-                  <select
-                    value={categoria}
-                    onChange={(e) =>
-                      setCategoria(e.target.value)
+  <p className="text-xs text-gray-500 mb-4">
+    Selecione uma ou mais categorias para este produto.
+  </p>
+
+  <div className="space-y-4">
+    {categoriasDisponiveis.map((categoria) => (
+      <div
+        key={categoria.valor}
+        className="border rounded-xl p-4"
+      >
+        <p className="font-semibold text-roxo-escuro mb-3">
+          {categoria.nome}
+        </p>
+
+        {categoria.subcategorias ? (
+          <div className="space-y-2 pl-2">
+            {categoria.subcategorias.map((subcategoria) => {
+              const selecionada =
+                categoriasSelecionadas.some(
+                  (item) =>
+                    item.principal === categoria.valor &&
+                    item.subcategoria === subcategoria.valor
+                )
+
+              return (
+                <label
+                  key={subcategoria.valor}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selecionada}
+                    onChange={() =>
+                      alternarCategoria(
+                        categoria.valor,
+                        subcategoria.valor
+                      )
                     }
-                    className="w-full border rounded-xl px-4 py-3 bg-white"
-                  >
-                    <option value="blusas">
-                      Blusas
-                    </option>
+                    className="w-4 h-4 accent-purple-600"
+                  />
 
-                    <option value="calcas">
-                      Calças
-                    </option>
+                  <span className="text-sm">
+                    {subcategoria.nome}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        ) : (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={categoriasSelecionadas.some(
+                (item) =>
+                  item.principal === categoria.valor &&
+                  item.subcategoria === null
+              )}
+              onChange={() =>
+                alternarCategoria(
+                  categoria.valor,
+                  null
+                )
+              }
+              className="w-4 h-4 accent-purple-600"
+            />
 
-                    <option value="shorts-e-saias">
-                      Shorts e Saias
-                    </option>
+            <span className="text-sm">
+              {categoria.nome}
+            </span>
+          </label>
+        )}
+      </div>
+    ))}
+  </div>
 
-                    <option value="vestidos">
-                      Vestidos
-                    </option>
+  {categoriasSelecionadas.length > 0 && (
+    <div className="mt-4 rounded-xl bg-gray-50 p-3">
+      <p className="text-sm font-medium mb-2">
+        Categorias selecionadas:
+      </p>
 
-                    <option value="conjuntos">
-                      Conjuntos
-                    </option>
+      <div className="flex flex-wrap gap-2">
+        {categoriasSelecionadas.map((item) => {
+          const categoriaPrincipal =
+            categoriasDisponiveis.find(
+              (categoria) =>
+                categoria.valor === item.principal
+            )
 
-                    <option value="acessorios">
-                      Acessórios
-                    </option>
+          const subcategoria =
+            categoriaPrincipal?.subcategorias?.find(
+              (sub) =>
+                sub.valor === item.subcategoria
+            )
 
-                    <option value="colecao-inverno">
-                      Coleção Inverno
-                    </option>
-                  </select>
-                </div>
+          return (
+            <span
+              key={`${item.principal}-${item.subcategoria}`}
+              className="bg-roxo text-white text-xs px-3 py-1 rounded-full"
+            >
+              {subcategoria
+                ? `${categoriaPrincipal?.nome} → ${subcategoria.nome}`
+                : categoriaPrincipal?.nome}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )}
+</div>
 
                 {/* TAMANHOS */}
 
