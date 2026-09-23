@@ -13,20 +13,140 @@ type FotoProduto = {
   nova?: boolean
 }
 
+type Categoria = {
+  nome: string
+  valor: string
+  subcategorias?: {
+    nome: string
+    valor: string
+  }[]
+}
+
+type CategoriaSelecionada = {
+  principal: string
+  subcategoria: string | null
+}
+
+const categoriasDisponiveis: Categoria[] = [
+  {
+    nome: "Vestidos",
+    valor: "vestidos",
+    subcategorias: [
+      {
+        nome: "Vestidos Casuais",
+        valor: "vestidos-casuais",
+      },
+      {
+        nome: "Vestidos Sociais",
+        valor: "vestidos-sociais",
+      },
+      {
+        nome: "Vestidos Justos",
+        valor: "vestidos-justos",
+      },
+    ],
+  },
+
+  {
+    nome: "Blusas",
+    valor: "blusas",
+    subcategorias: [
+      {
+        nome: "Blusas Casuais",
+        valor: "blusas-casuais",
+      },
+      {
+        nome: "Blusas Sociais",
+        valor: "blusas-sociais",
+      },
+      {
+        nome: "Croppeds & Justinhas",
+        valor: "croppeds-justinhas",
+      },
+      {
+        nome: "T-shirts",
+        valor: "t-shirts",
+      },
+    ],
+  },
+
+  {
+    nome: "Calças",
+    valor: "calcas",
+  },
+
+  {
+    nome: "Shorts & Saias",
+    valor: "shorts-e-saias",
+    subcategorias: [
+      {
+        nome: "Shorts",
+        valor: "shorts",
+      },
+      {
+        nome: "Saias",
+        valor: "saias",
+      },
+    ],
+  },
+
+  {
+    nome: "Conjuntos",
+    valor: "conjuntos",
+  },
+
+  {
+    nome: "Moda Cristã",
+    valor: "moda-crista",
+    subcategorias: [
+      {
+        nome: "Saias",
+        valor: "moda-crista-saias",
+      },
+      {
+        nome: "Vestidos",
+        valor: "moda-crista-vestidos",
+      },
+      {
+        nome: "T-shirts com frases",
+        valor: "t-shirts-com-frases",
+      },
+      {
+        nome: "Blusas",
+        valor: "moda-crista-blusas",
+      },
+    ],
+  },
+
+  {
+    nome: "Acessórios",
+    valor: "acessorios",
+  },
+
+  {
+    nome: "Coleção Inverno",
+    valor: "colecao-inverno",
+  },
+]
+
 export default function EditarProduto() {
   const params = useParams()
   const id = Number(params.id)
 
   const [nome, setNome] = useState("")
   const [preco, setPreco] = useState("")
-  const [categoria, setCategoria] = useState("vestidos")
+
+  const [categoriasSelecionadas, setCategoriasSelecionadas] =
+    useState<CategoriaSelecionada[]>([])
 
   const [tamanhos, setTamanhos] = useState<string[]>([])
   const [cores, setCores] = useState<string[]>([])
   const [fotos, setFotos] = useState<FotoProduto[]>([])
 
   const [coresOriginais, setCoresOriginais] = useState<string[]>([])
-  const [fotosOriginais, setFotosOriginais] = useState<FotoProduto[]>([])
+  const [fotosOriginais, setFotosOriginais] = useState<
+    FotoProduto[]
+  >([])
 
   const [novaCor, setNovaCor] = useState("")
 
@@ -46,8 +166,14 @@ export default function EditarProduto() {
     setCarregando(true)
     setErro("")
 
-    // Busca o produto
-    const { data: produto, error: erroProduto } = await supabase
+    // =====================================================
+    // BUSCAR PRODUTO
+    // =====================================================
+
+    const {
+      data: produto,
+      error: erroProduto,
+    } = await supabase
       .from("produtos")
       .select("*")
       .eq("id", id)
@@ -55,33 +181,42 @@ export default function EditarProduto() {
 
     if (erroProduto) {
       console.error(erroProduto)
+
       setErro(
         `Erro ao carregar produto: ${
           erroProduto.message || "Erro desconhecido"
         }`
       )
+
       setCarregando(false)
       return
     }
 
     setNome(produto.nome || "")
     setPreco(String(produto.preco ?? ""))
-    setCategoria(produto.categoria || "vestidos")
     setTamanhos(produto.tamanhos || [])
 
-    // Busca as fotos das cores na tabela nova
-    const { data: fotosSalvas, error: erroFotos } = await supabase
-      .from("fotos_produto")
-      .select("*")
-      .eq("produto_id", id)
-      .order("ordem", { ascending: true })
+    // =====================================================
+    // BUSCAR CATEGORIAS
+    // =====================================================
 
-    if (erroFotos) {
-      console.error(erroFotos)
+    const {
+      data: categoriasSalvas,
+      error: erroCategorias,
+    } = await supabase
+      .from("produto_categorias")
+      .select(
+        "categoria_principal, subcategoria"
+      )
+      .eq("produto_id", id)
+
+    if (erroCategorias) {
+      console.error(erroCategorias)
 
       setErro(
-        `Erro ao carregar as fotos: ${
-          erroFotos.message || "Erro desconhecido"
+        `Erro ao carregar as categorias: ${
+          erroCategorias.message ||
+          "Erro desconhecido"
         }`
       )
 
@@ -89,21 +224,105 @@ export default function EditarProduto() {
       return
     }
 
-    const fotosFormatadas: FotoProduto[] = (fotosSalvas || []).map(
-      (foto) => ({
+    if (
+      categoriasSalvas &&
+      categoriasSalvas.length > 0
+    ) {
+      setCategoriasSelecionadas(
+        categoriasSalvas.map((item) => ({
+          principal:
+            item.categoria_principal,
+          subcategoria:
+            item.subcategoria,
+        }))
+      )
+    } else {
+      // ===================================================
+      // COMPATIBILIDADE COM PRODUTOS ANTIGOS
+      // ===================================================
+      //
+      // Produtos antigos podem ainda ter somente
+      // produtos.categoria.
+      //
+      // Se for uma categoria direta, conseguimos
+      // carregá-la automaticamente.
+      //
+      // Se for uma categoria que possui subcategorias,
+      // será necessário escolher a subcategoria
+      // manualmente.
+
+      const categoriaAntiga =
+        produto.categoria || ""
+
+      const categoriaEncontrada =
+        categoriasDisponiveis.find(
+          (categoria) =>
+            categoria.valor ===
+            categoriaAntiga
+        )
+
+      if (
+        categoriaEncontrada &&
+        !categoriaEncontrada.subcategorias
+      ) {
+        setCategoriasSelecionadas([
+          {
+            principal:
+              categoriaEncontrada.valor,
+            subcategoria: null,
+          },
+        ])
+      } else {
+        setCategoriasSelecionadas([])
+      }
+    }
+
+    // =====================================================
+    // BUSCAR FOTOS
+    // =====================================================
+
+    const {
+      data: fotosSalvas,
+      error: erroFotos,
+    } = await supabase
+      .from("fotos_produto")
+      .select("*")
+      .eq("produto_id", id)
+      .order("ordem", {
+        ascending: true,
+      })
+
+    if (erroFotos) {
+      console.error(erroFotos)
+
+      setErro(
+        `Erro ao carregar as fotos: ${
+          erroFotos.message ||
+          "Erro desconhecido"
+        }`
+      )
+
+      setCarregando(false)
+      return
+    }
+
+    const fotosFormatadas: FotoProduto[] =
+      (fotosSalvas || []).map((foto) => ({
         id: foto.id,
         produto_id: foto.produto_id,
         cor: foto.cor,
         imagem: foto.imagem,
         arquivo: null,
         nova: false,
-      })
-    )
+      }))
 
     setFotos(fotosFormatadas)
     setFotosOriginais(fotosFormatadas)
 
-    const coresSalvas = fotosFormatadas.map((foto) => foto.cor)
+    const coresSalvas =
+      fotosFormatadas.map(
+        (foto) => foto.cor
+      )
 
     setCores(coresSalvas)
     setCoresOriginais(coresSalvas)
@@ -111,13 +330,61 @@ export default function EditarProduto() {
     setCarregando(false)
   }
 
-  function selecionarTamanho(tamanho: string) {
+  // =====================================================
+  // CATEGORIAS
+  // =====================================================
+
+  function alternarCategoria(
+    principal: string,
+    subcategoria: string | null
+  ) {
+    setCategoriasSelecionadas((atuais) => {
+      const existe = atuais.some(
+        (item) =>
+          item.principal === principal &&
+          item.subcategoria === subcategoria
+      )
+
+      if (existe) {
+        return atuais.filter(
+          (item) =>
+            !(
+              item.principal === principal &&
+              item.subcategoria ===
+                subcategoria
+            )
+        )
+      }
+
+      return [
+        ...atuais,
+        {
+          principal,
+          subcategoria,
+        },
+      ]
+    })
+  }
+
+  // =====================================================
+  // TAMANHOS
+  // =====================================================
+
+  function selecionarTamanho(
+    tamanho: string
+  ) {
     setTamanhos((atuais) =>
       atuais.includes(tamanho)
-        ? atuais.filter((item) => item !== tamanho)
+        ? atuais.filter(
+            (item) => item !== tamanho
+          )
         : [...atuais, tamanho]
     )
   }
+
+  // =====================================================
+  // CORES
+  // =====================================================
 
   function adicionarCor() {
     const cor = novaCor.trim()
@@ -128,17 +395,24 @@ export default function EditarProduto() {
     }
 
     const jaExiste = cores.some(
-      (item) => item.toLowerCase() === cor.toLowerCase()
+      (item) =>
+        item.toLowerCase() ===
+        cor.toLowerCase()
     )
 
     if (jaExiste) {
-      setErro("Essa cor já está cadastrada.")
+      setErro(
+        "Essa cor já está cadastrada."
+      )
       return
     }
 
     setErro("")
 
-    setCores((atuais) => [...atuais, cor])
+    setCores((atuais) => [
+      ...atuais,
+      cor,
+    ])
 
     setFotos((atuais) => [
       ...atuais,
@@ -162,13 +436,17 @@ export default function EditarProduto() {
 
     setCores((atuais) =>
       atuais.filter(
-        (item) => item.toLowerCase() !== cor.toLowerCase()
+        (item) =>
+          item.toLowerCase() !==
+          cor.toLowerCase()
       )
     )
 
     setFotos((atuais) =>
       atuais.filter(
-        (foto) => foto.cor.toLowerCase() !== cor.toLowerCase()
+        (foto) =>
+          foto.cor.toLowerCase() !==
+          cor.toLowerCase()
       )
     )
 
@@ -182,7 +460,8 @@ export default function EditarProduto() {
   ) {
     setFotos((atuais) =>
       atuais.map((foto) =>
-        foto.cor.toLowerCase() === cor.toLowerCase()
+        foto.cor.toLowerCase() ===
+        cor.toLowerCase()
           ? {
               ...foto,
               arquivo,
@@ -192,28 +471,49 @@ export default function EditarProduto() {
     )
   }
 
+  // =====================================================
+  // SALVAR
+  // =====================================================
+
   async function salvarAlteracoes() {
     setErro("")
     setMensagem("")
 
-    if (!nome.trim() || !preco || !categoria) {
-      setErro("Preencha todos os campos.")
+    if (!nome.trim() || !preco) {
+      setErro(
+        "Preencha todos os campos."
+      )
+      return
+    }
+
+    if (
+      categoriasSelecionadas.length ===
+      0
+    ) {
+      setErro(
+        "Escolha pelo menos uma categoria."
+      )
       return
     }
 
     if (tamanhos.length === 0) {
-      setErro("Escolha pelo menos um tamanho.")
+      setErro(
+        "Escolha pelo menos um tamanho."
+      )
       return
     }
 
     if (cores.length === 0) {
-      setErro("Cadastre pelo menos uma cor.")
+      setErro(
+        "Cadastre pelo menos uma cor."
+      )
       return
     }
 
     // Verifica se todas as cores possuem foto
     const corSemFoto = fotos.find(
-      (foto) => !foto.imagem && !foto.arquivo
+      (foto) =>
+        !foto.imagem && !foto.arquivo
     )
 
     if (corSemFoto) {
@@ -227,44 +527,54 @@ export default function EditarProduto() {
 
     try {
       // =====================================================
-  // =====================================================
-// 1. DESCOBRIR QUAIS FOTOS FORAM EXCLUÍDAS
-// =====================================================
-
-const fotosRemovidas = fotosOriginais.filter(
-  (fotoOriginal) =>
-    !cores.some(
-      (corAtual) =>
-        corAtual.toLowerCase().trim() ===
-        fotoOriginal.cor.toLowerCase().trim()
-    )
-)
-
-// =====================================================
-// 2. EXCLUIR AS FOTOS REMOVIDAS PELO ID
-// =====================================================
-
-for (const fotoRemovida of fotosRemovidas) {
-  if (!fotoRemovida.id) continue
-
-  const { error: erroDelete } = await supabase
-    .from("fotos_produto")
-    .delete()
-    .eq("id", fotoRemovida.id)
-
-  if (erroDelete) {
-    console.error(erroDelete)
-
-    setErro(
-      `Não foi possível excluir a cor ${fotoRemovida.cor}.`
-    )
-
-    setSalvando(false)
-    return
-  }
-}
+      // 1. DESCOBRIR QUAIS FOTOS FORAM EXCLUÍDAS
       // =====================================================
-      // 3. ENVIAR / ATUALIZAR FOTOS DAS CORES
+
+      const fotosRemovidas =
+        fotosOriginais.filter(
+          (fotoOriginal) =>
+            !cores.some(
+              (corAtual) =>
+                corAtual
+                  .toLowerCase()
+                  .trim() ===
+                fotoOriginal.cor
+                  .toLowerCase()
+                  .trim()
+            )
+        )
+
+      // =====================================================
+      // 2. EXCLUIR FOTOS REMOVIDAS
+      // =====================================================
+
+      for (const fotoRemovida of fotosRemovidas) {
+        if (!fotoRemovida.id) continue
+
+        const {
+          error: erroDelete,
+        } = await supabase
+          .from("fotos_produto")
+          .delete()
+          .eq(
+            "id",
+            fotoRemovida.id
+          )
+
+        if (erroDelete) {
+          console.error(erroDelete)
+
+          setErro(
+            `Não foi possível excluir a cor ${fotoRemovida.cor}.`
+          )
+
+          setSalvando(false)
+          return
+        }
+      }
+
+      // =====================================================
+      // 3. ENVIAR / ATUALIZAR FOTOS
       // =====================================================
 
       const fotosFinais: {
@@ -275,16 +585,23 @@ for (const fotoRemovida of fotosRemovidas) {
       for (const foto of fotos) {
         let urlImagem = foto.imagem
 
-        // Se foi escolhida uma nova imagem
         if (foto.arquivo) {
           const nomeArquivo =
             `${Date.now()}-${Math.random()
               .toString(36)
-              .substring(2, 8)}-${foto.arquivo.name.replace(/\s/g, "-")}`
+              .substring(2, 8)}-${foto.arquivo.name.replace(
+                /\s/g,
+                "-"
+              )}`
 
-          const { error: uploadError } = await supabase.storage
+          const {
+            error: uploadError,
+          } = await supabase.storage
             .from("produtos")
-            .upload(nomeArquivo, foto.arquivo)
+            .upload(
+              nomeArquivo,
+              foto.arquivo
+            )
 
           if (uploadError) {
             console.error(uploadError)
@@ -297,11 +614,16 @@ for (const fotoRemovida of fotosRemovidas) {
             return
           }
 
-          const { data: imagemData } = supabase.storage
+          const {
+            data: imagemData,
+          } = supabase.storage
             .from("produtos")
-            .getPublicUrl(nomeArquivo)
+            .getPublicUrl(
+              nomeArquivo
+            )
 
-          urlImagem = imagemData.publicUrl
+          urlImagem =
+            imagemData.publicUrl
         }
 
         fotosFinais.push({
@@ -309,22 +631,29 @@ for (const fotoRemovida of fotosRemovidas) {
           imagem: urlImagem,
         })
 
-        // =====================================================
-        // SE A FOTO JÁ EXISTE → ATUALIZA
-        // SE É NOVA → INSERE
-        // =====================================================
+        // ===================================================
+        // FOTO EXISTENTE → ATUALIZAR
+        // FOTO NOVA → INSERIR
+        // ===================================================
 
         if (foto.id) {
-          const { error: erroUpdate } = await supabase
+          const {
+            error: erroUpdate,
+          } = await supabase
             .from("fotos_produto")
             .update({
               cor: foto.cor,
               imagem: urlImagem,
             })
-            .eq("id", foto.id)
+            .eq(
+              "id",
+              foto.id
+            )
 
           if (erroUpdate) {
-            console.error(erroUpdate)
+            console.error(
+              erroUpdate
+            )
 
             setErro(
               `Não foi possível atualizar a foto da cor ${foto.cor}.`
@@ -334,17 +663,23 @@ for (const fotoRemovida of fotosRemovidas) {
             return
           }
         } else {
-          const { error: erroInsert } = await supabase
+          const {
+            error: erroInsert,
+          } = await supabase
             .from("fotos_produto")
             .insert({
               produto_id: id,
               cor: foto.cor,
               imagem: urlImagem,
-              ordem: fotosFinais.length - 1,
+              ordem:
+                fotosFinais.length -
+                1,
             })
 
           if (erroInsert) {
-            console.error(erroInsert)
+            console.error(
+              erroInsert
+            )
 
             setErro(
               `Não foi possível salvar a foto da cor ${foto.cor}.`
@@ -365,26 +700,37 @@ for (const fotoRemovida of fotosRemovidas) {
           ? fotosFinais[0].imagem
           : ""
 
-      const { error: erroProduto } = await supabase
+      // Mantemos a primeira categoria
+      // na coluna antiga "categoria"
+      // apenas por compatibilidade.
+      const categoriaPrincipal =
+        categoriasSelecionadas[0]
+          .principal
+
+      const {
+        error: erroProduto,
+      } = await supabase
         .from("produtos")
         .update({
           nome: nome.trim(),
           preco: Number(preco),
-          categoria,
+          categoria:
+            categoriaPrincipal,
           tamanhos,
           cores,
-          // Mantemos essa coluna apenas por compatibilidade
-          // com o banco antigo.
           imagem: primeiraFoto,
         })
         .eq("id", id)
 
       if (erroProduto) {
-        console.error(erroProduto)
+        console.error(
+          erroProduto
+        )
 
         setErro(
           `Não foi possível salvar o produto: ${
-            erroProduto.message || "Erro desconhecido"
+            erroProduto.message ||
+            "Erro desconhecido"
           }`
         )
 
@@ -393,20 +739,95 @@ for (const fotoRemovida of fotosRemovidas) {
       }
 
       // =====================================================
-      // 5. RECARREGAR OS DADOS
+      // 5. ATUALIZAR CATEGORIAS
+      // =====================================================
+
+      const {
+        error: erroExcluirCategorias,
+      } = await supabase
+        .from("produto_categorias")
+        .delete()
+        .eq(
+          "produto_id",
+          id
+        )
+
+      if (erroExcluirCategorias) {
+        console.error(
+          erroExcluirCategorias
+        )
+
+        setErro(
+          `O produto foi atualizado, mas não foi possível atualizar as categorias: ${
+            erroExcluirCategorias.message ||
+            "Erro desconhecido"
+          }`
+        )
+
+        setSalvando(false)
+        return
+      }
+
+      const categoriasParaSalvar =
+        categoriasSelecionadas.map(
+          (item) => ({
+            produto_id: id,
+            categoria_principal:
+              item.principal,
+            subcategoria:
+              item.subcategoria,
+          })
+        )
+
+      const {
+        error: erroInserirCategorias,
+      } = await supabase
+        .from("produto_categorias")
+        .insert(
+          categoriasParaSalvar
+        )
+
+      if (erroInserirCategorias) {
+        console.error(
+          erroInserirCategorias
+        )
+
+        setErro(
+          `O produto foi atualizado, mas não foi possível salvar as categorias: ${
+            erroInserirCategorias.message ||
+            "Erro desconhecido"
+          }`
+        )
+
+        setSalvando(false)
+        return
+      }
+
+      // =====================================================
+      // 6. RECARREGAR
       // =====================================================
 
       await buscarProduto()
 
-      setMensagem("Produto atualizado com sucesso! 🎉")
+      setMensagem(
+        "Produto atualizado com sucesso! 🎉"
+      )
+
       setSalvando(false)
     } catch (error) {
       console.error(error)
 
-      setErro("Ocorreu um erro ao salvar as alterações.")
+      setErro(
+        "Ocorreu um erro ao salvar as alterações."
+      )
+
       setSalvando(false)
     }
   }
+
+  // =====================================================
+  // CARREGANDO
+  // =====================================================
 
   if (carregando) {
     return (
@@ -418,6 +839,10 @@ for (const fotoRemovida of fotosRemovidas) {
     )
   }
 
+  // =====================================================
+  // TELA
+  // =====================================================
+
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-md mx-auto">
@@ -425,8 +850,10 @@ for (const fotoRemovida of fotosRemovidas) {
         {/* VOLTAR */}
 
         <button
+          type="button"
           onClick={() => {
-            window.location.href = "/admin/produtos"
+            window.location.href =
+              "/admin/produtos"
           }}
           className="text-gray-500 mb-4"
         >
@@ -457,7 +884,9 @@ for (const fotoRemovida of fotosRemovidas) {
               <input
                 type="text"
                 value={nome}
-                onChange={(e) => setNome(e.target.value)}
+                onChange={(e) =>
+                  setNome(e.target.value)
+                }
                 className="w-full border rounded-xl px-4 py-3"
               />
             </div>
@@ -475,37 +904,172 @@ for (const fotoRemovida of fotosRemovidas) {
                 type="number"
                 step="0.01"
                 value={preco}
-                onChange={(e) => setPreco(e.target.value)}
+                onChange={(e) =>
+                  setPreco(e.target.value)
+                }
                 className="w-full border rounded-xl px-4 py-3"
               />
             </div>
 
             {/* ================================================= */}
-            {/* CATEGORIA */}
+            {/* CATEGORIAS */}
             {/* ================================================= */}
 
             <div>
-              <label className="block text-sm font-medium mb-1">
-                Categoria
+              <label className="block text-sm font-medium mb-2">
+                Categorias
               </label>
 
-              <select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-                className="w-full border rounded-xl px-4 py-3 bg-white"
-              >
-                <option value="blusas">Blusas</option>
-                <option value="calcas">Calças</option>
-                <option value="shorts-e-saias">
-                  Shorts e Saias
-                </option>
-                <option value="vestidos">Vestidos</option>
-                <option value="conjuntos">Conjuntos</option>
-                <option value="acessorios">Acessórios</option>
-                <option value="colecao-inverno">
-                  Coleção Inverno
-                </option>
-              </select>
+              <p className="text-xs text-gray-500 mb-4">
+                Selecione uma ou mais categorias
+                para este produto.
+              </p>
+
+              <div className="space-y-4">
+
+                {categoriasDisponiveis.map(
+                  (categoria) => (
+                    <div
+                      key={categoria.valor}
+                      className="border rounded-xl p-4"
+                    >
+                      <p className="font-semibold text-roxo-escuro mb-3">
+                        {categoria.nome}
+                      </p>
+
+                      {categoria.subcategorias ? (
+                        <div className="space-y-2 pl-2">
+
+                          {categoria.subcategorias.map(
+                            (subcategoria) => {
+                              const selecionada =
+                                categoriasSelecionadas.some(
+                                  (item) =>
+                                    item.principal ===
+                                      categoria.valor &&
+                                    item.subcategoria ===
+                                      subcategoria.valor
+                                )
+
+                              return (
+                                <label
+                                  key={
+                                    subcategoria.valor
+                                  }
+                                  className="flex items-center gap-2 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      selecionada
+                                    }
+                                    onChange={() =>
+                                      alternarCategoria(
+                                        categoria.valor,
+                                        subcategoria.valor
+                                      )
+                                    }
+                                    className="w-4 h-4 accent-purple-600"
+                                  />
+
+                                  <span className="text-sm">
+                                    {
+                                      subcategoria.nome
+                                    }
+                                  </span>
+                                </label>
+                              )
+                            }
+                          )}
+
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 cursor-pointer">
+
+                          <input
+                            type="checkbox"
+                            checked={categoriasSelecionadas.some(
+                              (item) =>
+                                item.principal ===
+                                  categoria.valor &&
+                                item.subcategoria ===
+                                  null
+                            )}
+                            onChange={() =>
+                              alternarCategoria(
+                                categoria.valor,
+                                null
+                              )
+                            }
+                            className="w-4 h-4 accent-purple-600"
+                          />
+
+                          <span className="text-sm">
+                            {categoria.nome}
+                          </span>
+
+                        </label>
+                      )}
+                    </div>
+                  )
+                )}
+
+              </div>
+
+              {/* CATEGORIAS SELECIONADAS */}
+
+              {categoriasSelecionadas.length >
+                0 && (
+                <div className="mt-4 rounded-xl bg-gray-50 p-3">
+
+                  <p className="text-sm font-medium mb-2">
+                    Categorias selecionadas:
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+
+                    {categoriasSelecionadas.map(
+                      (item) => {
+                        const principal =
+                          categoriasDisponiveis.find(
+                            (categoria) =>
+                              categoria.valor ===
+                              item.principal
+                          )
+
+                        const subcategoria =
+                          principal?.subcategorias?.find(
+                            (sub) =>
+                              sub.valor ===
+                              item.subcategoria
+                          )
+
+                        return (
+                          <span
+                            key={`${item.principal}-${item.subcategoria}`}
+                            className="bg-roxo text-white text-xs px-3 py-1 rounded-full"
+                          >
+                            {subcategoria
+                              ? `${principal?.nome} → ${subcategoria.nome}`
+                              : principal?.nome}
+                          </span>
+                        )
+                      }
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+              {categoriasSelecionadas.length ===
+                0 && (
+                <p className="text-xs text-orange-600 mt-3">
+                  Nenhuma categoria selecionada.
+                  Escolha pelo menos uma para
+                  salvar o produto.
+                </p>
+              )}
             </div>
 
             {/* ================================================= */}
@@ -531,10 +1095,14 @@ for (const fotoRemovida of fotosRemovidas) {
                     key={tamanho}
                     type="button"
                     onClick={() =>
-                      selecionarTamanho(tamanho)
+                      selecionarTamanho(
+                        tamanho
+                      )
                     }
                     className={`px-4 py-2 rounded-full border ${
-                      tamanhos.includes(tamanho)
+                      tamanhos.includes(
+                        tamanho
+                      )
                         ? "bg-roxo text-white"
                         : "bg-white text-gray-700"
                     }`}
@@ -556,8 +1124,8 @@ for (const fotoRemovida of fotosRemovidas) {
               </label>
 
               <p className="text-xs text-gray-500 mb-3">
-                Aqui aparecem somente as cores cadastradas
-                neste produto.
+                Aqui aparecem somente as cores
+                cadastradas neste produto.
               </p>
 
               {cores.length === 0 ? (
@@ -578,7 +1146,9 @@ for (const fotoRemovida of fotosRemovidas) {
 
                       <button
                         type="button"
-                        onClick={() => excluirCor(cor)}
+                        onClick={() =>
+                          excluirCor(cor)
+                        }
                         className="text-red-500 text-sm font-medium hover:text-red-700"
                       >
                         🗑️ Excluir
@@ -604,7 +1174,11 @@ for (const fotoRemovida of fotosRemovidas) {
                 <input
                   type="text"
                   value={novaCor}
-                  onChange={(e) => setNovaCor(e.target.value)}
+                  onChange={(e) =>
+                    setNovaCor(
+                      e.target.value
+                    )
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -636,7 +1210,8 @@ for (const fotoRemovida of fotosRemovidas) {
               </label>
 
               <p className="text-xs text-gray-500 mb-4">
-                Escolha uma foto para cada cor cadastrada.
+                Escolha uma foto para cada cor
+                cadastrada.
               </p>
 
               <div className="space-y-4">
@@ -656,7 +1231,9 @@ for (const fotoRemovida of fotosRemovidas) {
                       <button
                         type="button"
                         onClick={() =>
-                          excluirCor(foto.cor)
+                          excluirCor(
+                            foto.cor
+                          )
                         }
                         className="text-red-500 text-xs font-medium"
                       >
@@ -667,19 +1244,22 @@ for (const fotoRemovida of fotosRemovidas) {
 
                     {/* FOTO ATUAL */}
 
-                    {foto.imagem && !foto.arquivo && (
-                      <img
-                        src={foto.imagem}
-                        alt={`Foto da cor ${foto.cor}`}
-                        className="w-full h-40 object-cover rounded-xl mb-3"
-                      />
-                    )}
+                    {foto.imagem &&
+                      !foto.arquivo && (
+                        <img
+                          src={foto.imagem}
+                          alt={`Foto da cor ${foto.cor}`}
+                          className="w-full h-40 object-cover rounded-xl mb-3"
+                        />
+                      )}
 
                     {/* NOVA FOTO */}
 
                     {foto.arquivo && (
                       <img
-                        src={URL.createObjectURL(foto.arquivo)}
+                        src={URL.createObjectURL(
+                          foto.arquivo
+                        )}
                         alt={`Nova foto da cor ${foto.cor}`}
                         className="w-full h-40 object-cover rounded-xl mb-3"
                       />
@@ -690,7 +1270,8 @@ for (const fotoRemovida of fotosRemovidas) {
                       accept="image/*"
                       onChange={(e) => {
                         const arquivo =
-                          e.target.files?.[0] || null
+                          e.target.files?.[0] ||
+                          null
 
                         alterarArquivoCor(
                           foto.cor,
@@ -737,6 +1318,7 @@ for (const fotoRemovida of fotosRemovidas) {
             {/* ================================================= */}
 
             <button
+              type="button"
               onClick={salvarAlteracoes}
               disabled={salvando}
               className="w-full bg-roxo text-white rounded-xl py-3 font-semibold disabled:opacity-50"

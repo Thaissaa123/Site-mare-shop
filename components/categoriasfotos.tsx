@@ -5,8 +5,15 @@ import { supabase } from "@/lib/supabase"
 import { useCategoria } from "@/components/categoria-context"
 
 type Produto = {
+  id: number
   categoria: string
   imagem: string
+}
+
+type ProdutoCategoria = {
+  produto_id: number
+  categoria_principal: string
+  subcategoria: string | null
 }
 
 type Categoria = {
@@ -122,47 +129,136 @@ const categorias: Categoria[] = [
 
 export default function CategoriasFotos() {
   const [produtos, setProdutos] = useState<Produto[]>([])
+  const [produtosCategorias, setProdutosCategorias] =
+    useState<ProdutoCategoria[]>([])
+
   const [categoriaAberta, setCategoriaAberta] =
     useState<Categoria | null>(null)
 
-  const { setCategoria, setSubcategoria } = useCategoria()
+  const {
+    setCategoria,
+    setSubcategoria,
+  } = useCategoria()
 
   useEffect(() => {
-    async function carregarProdutos() {
-      const { data, error } = await supabase
-        .from("produtos")
-        .select("*")
+    async function carregarDados() {
+      const [
+        { data: produtosData, error: erroProdutos },
+        {
+          data: categoriasData,
+          error: erroCategorias,
+        },
+      ] = await Promise.all([
+        supabase
+          .from("produtos")
+          .select("id, categoria, imagem"),
 
-      if (error) {
+        supabase
+          .from("produto_categorias")
+          .select(
+            "produto_id, categoria_principal, subcategoria"
+          ),
+      ])
+
+      if (erroProdutos) {
         console.error(
-          "Erro ao carregar imagens das categorias:",
-          error.message,
-          error.details,
-          error.hint
+          "Erro ao carregar imagens dos produtos:",
+          erroProdutos.message,
+          erroProdutos.details,
+          erroProdutos.hint
         )
         return
       }
 
-      setProdutos(
-        (data || []).map((produto) => ({
-          categoria: produto.categoria,
-          imagem: produto.imagem,
-        }))
+      if (erroCategorias) {
+        console.error(
+          "Erro ao carregar categorias dos produtos:",
+          erroCategorias.message,
+          erroCategorias.details,
+          erroCategorias.hint
+        )
+        return
+      }
+
+      setProdutos(produtosData || [])
+      setProdutosCategorias(
+        categoriasData || []
       )
     }
 
-    carregarProdutos()
+    carregarDados()
   }, [])
 
-  function pegarImagem(categoria: string) {
+  // =========================================
+  // PEGA IMAGEM DE UMA CATEGORIA PRINCIPAL
+  // =========================================
+
+  function pegarImagemCategoria(
+    categoria: string
+  ) {
+    // Primeiro tenta encontrar através
+    // da nova tabela de categorias
+    const associacao =
+      produtosCategorias.find(
+        (item) =>
+          item.categoria_principal ===
+            categoria &&
+          item.produto_id
+      )
+
+    if (associacao) {
+      const produto = produtos.find(
+        (item) =>
+          item.id === associacao.produto_id
+      )
+
+      if (produto?.imagem) {
+        return produto.imagem
+      }
+    }
+
+    // Fallback para produtos antigos
+    const produtoAntigo =
+      produtos.find(
+        (produto) =>
+          produto.categoria === categoria
+      )
+
+    return produtoAntigo?.imagem || ""
+  }
+
+  // =========================================
+  // PEGA IMAGEM DE UMA SUBCATEGORIA
+  // =========================================
+
+  function pegarImagemSubcategoria(
+    categoriaPrincipal: string,
+    subcategoria: string
+  ) {
+    // Procura uma associação EXATA
+    const associacao =
+      produtosCategorias.find(
+        (item) =>
+          item.categoria_principal ===
+            categoriaPrincipal &&
+          item.subcategoria === subcategoria
+      )
+
+    if (!associacao) {
+      return ""
+    }
+
     const produto = produtos.find(
-      (produto) => produto.categoria === categoria
+      (item) =>
+        item.id === associacao.produto_id
     )
 
     return produto?.imagem || ""
   }
 
-  function selecionarCategoria(categoria: Categoria) {
+  function selecionarCategoria(
+    categoria: Categoria
+  ) {
     if (categoria.subcategorias) {
       setCategoriaAberta(categoria)
       return
@@ -198,6 +294,7 @@ export default function CategoriasFotos() {
     return (
       <section className="px-4 py-6 md:px-8 md:py-8">
         <button
+          type="button"
           onClick={voltarCategorias}
           className="mb-5 flex items-center gap-2 text-sm font-medium text-roxo hover:underline"
         >
@@ -225,13 +322,16 @@ export default function CategoriasFotos() {
         >
           {categoriaAberta.subcategorias?.map(
             (subcategoria) => {
-              const imagem = pegarImagem(
-                categoriaAberta.valor
-              )
+              const imagem =
+                pegarImagemSubcategoria(
+                  categoriaAberta.valor,
+                  subcategoria.valor
+                )
 
               return (
                 <button
                   key={subcategoria.valor}
+                  type="button"
                   onClick={() =>
                     selecionarSubcategoria(
                       subcategoria
@@ -327,13 +427,19 @@ export default function CategoriasFotos() {
         "
       >
         {categorias.map((categoria) => {
-          const imagem = pegarImagem(categoria.valor)
+          const imagem =
+            pegarImagemCategoria(
+              categoria.valor
+            )
 
           return (
             <button
               key={categoria.valor}
+              type="button"
               onClick={() =>
-                selecionarCategoria(categoria)
+                selecionarCategoria(
+                  categoria
+                )
               }
               className="
                 flex
